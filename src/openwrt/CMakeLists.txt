@@ -39,4 +39,3 @@ if(OT_FIREWALL)
         DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/init.d
         RENAME otbr-firewall)
 endif(OT_FIREWALL)
-
