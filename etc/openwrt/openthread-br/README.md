@@ -51,8 +51,8 @@ opkg install openthread-br-1.0*.ipk
 
 NOTES:
 
-* `openthread-br` requires `ipset` and `iptables-mod-extra` packages if the firewall feature is enabled.
-* `openthread-br` requires `libavahi-client` package if the MDNS feature is enabled.
+- `openthread-br` requires `ipset` and `iptables-mod-extra` packages if the firewall feature is enabled.
+- `openthread-br` requires `libavahi-client` package if the MDNS feature is enabled.
 
 ## Usage
 
