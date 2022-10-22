@@ -60,9 +60,15 @@
     <!-- AttachAllNodesTo: Request to attach all nodes to the specified Thread network.
       @dataset: The Operational Dataset that contains parameter values of the Thread network
                 to attach to. It must be a full dataset.
+      @delay_ms: The delay between the method returns and the dataset takes effect, in
+                 milliseconds. If this value is 0, then the node is attached to the given network
+                 when this method returns. If this value is not 0, then the node is attached to
+                 its existing network when this method returns, and will attach to the given
+                 network after the delay.
     -->
     <method name="AttachAllNodesTo">
       <arg name="dataset" type="ay"/>
+      <arg name="delay_ms" type="x" direction="out"/>
     </method>
 
     <!-- Detach: Detach the current device from the Thread network. -->
@@ -200,6 +206,17 @@
     -->
     <method name="UpdateVendorMeshCopTxtEntries">
       <arg name="update" type="a(say)" direction="in"/>
+    </method>
+
+    <!-- GetProperties: Get one or more OpenThread properties.
+      @properties: Names of properties.
+    -->
+    <method name="GetProperties">
+      <arg name="properties" type="as" direction="in"/>
+    </method>
+
+    <!-- LeaveNetwork: Detach from the network and forget the credentials. -->
+    <method name="LeaveNetwork">
     </method>
 
     <!-- MeshLocalPrefix: The /64 mesh-local prefix.  -->
@@ -564,6 +581,139 @@
     <property name="DnssdCounters" type="(uuuuuuu)" access="read">
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
     </property>
+
+    <!-- MdnsTelemetryInfo: The MDNS information
+    <literallayout>
+        struct {
+          struct {  // host registration responses
+            uint32 success
+            uint32 not_found
+            uint32 invalid_args
+            uint32 duplicated
+            uint32 not_implemented
+            uint32 unknown_error
+          }
+          struct {  // service registration responses
+            uint32 success
+            uint32 not_found
+            uint32 invalid_args
+            uint32 duplicated
+            uint32 not_implemented
+            uint32 unknown_error
+          }
+          struct {  // host resolution responses
+            uint32 success
+            uint32 not_found
+            uint32 invalid_args
+            uint32 duplicated
+            uint32 not_implemented
+            uint32 unknown_error
+          }
+          struct {  // service resolution responses
+            uint32 success
+            uint32 not_found
+            uint32 invalid_args
+            uint32 duplicated
+            uint32 not_implemented
+            uint32 unknown_error
+          }
+          uint32 host_registration_ema_latency
+          uint32 service_registration_ema_latency
+          uint32 host_resolution_ema_latency
+          uint32 service_resolution_ema_latency
+        }
+      </literallayout>
+    -->
+    <property name="MdnsTelemetryInfo" type="(uuuuuu)(uuuuuu)(uuuuuu)(uuuuuu)uuuu" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
+    <!-- OtHostVersion: The version string of the host build. -->
+    <property name="OtHostVersion" type="s" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
+    <!-- OtRcpVersion: The version string of the RCP firmware. -->
+    <property name="OtRcpVersion" type="s" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
+    <!-- ThreadVersion: The Thread protocol version. -->
+    <property name="ThreadVersion" type="q" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
+    <!-- Eui64: The IEEE EUI-64 of this Thread interface. -->
+    <property name="Eui64" type="t" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
+    <!-- RadioSpinelMetrics: The radio spinel metrics
+    <literallayout>
+        struct {
+          uint32_t mRcpTimeoutCount;         // The number of RCP timeouts.
+          uint32_t mRcpUnexpectedResetCount; // The number of RCP unexcepted resets.
+          uint32_t mRcpRestorationCount;     // The number of RCP restorations.
+          uint32_t mSpinelParseErrorCount;   // The number of spinel frame parse errors.
+        }
+      </literallayout>
+    -->
+    <property name="RadioSpinelMetrics" type="(uuuu)" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
+    <!-- RcpInterfaceMetrics: The RCP interface metrics
+    <literallayout>
+        struct {
+          uint8_t  mRcpInterfaceType;             // The RCP interface type.
+          uint64_t mTransferredFrameCount;        // The number of transferred frames.
+          uint64_t mTransferredValidFrameCount;   // The number of transferred valid frames.
+          uint64_t mTransferredGarbageFrameCount; // The number of transferred garbage frames.
+          uint64_t mRxFrameCount;                 // The number of received frames.
+          uint64_t mRxFrameByteCount;             // The number of received bytes.
+          uint64_t mTxFrameCount;                 // The number of transmitted frames.
+          uint64_t mTxFrameByteCount;             // The number of transmitted bytes.
+        }
+      </literallayout>
+    -->
+    <property name="RcpInterfaceMetrics" type="(yttttttt)" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
+    <!-- Uptime: The number of milliseconds since OpenThread instance was initialized. -->
+    <property name="Uptime" type="t" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
+    <!-- RadioCoexMetrics: The radio coexistence metrics
+    <literallayout>
+        struct {
+          uint32_t mNumGrantGlitch;                     // Number of grant glitches.
+          uint32_t mNumTxRequest;                       // Number of tx requests.
+          uint32_t mNumTxGrantImmediate;                // Number of tx requests while grant was active.
+          uint32_t mNumTxGrantWait;                     // Number of tx requests while grant was inactive.
+          uint32_t mNumTxGrantWaitActivated;            // Number of tx requests while grant was inactive that were ultimately granted.
+          uint32_t mNumTxGrantWaitTimeout;              // Number of tx requests while grant was inactive that timed out.
+          uint32_t mNumTxGrantDeactivatedDuringRequest; // Number of tx that were in progress when grant was deactivated.
+          uint32_t mNumTxDelayedGrant;                  // Number of tx requests that were not granted within 50us.
+          uint32_t mAvgTxRequestToGrantTime;            // Average time in usec from tx request to grant.
+          uint32_t mNumRxRequest;                       // Number of rx requests.
+          uint32_t mNumRxGrantImmediate;                // Number of rx requests while grant was active.
+          uint32_t mNumRxGrantWait;                     // Number of rx requests while grant was inactive.
+          uint32_t mNumRxGrantWaitActivated;            // Number of rx requests while grant was inactive that were ultimately granted.
+          uint32_t mNumRxGrantWaitTimeout;              // Number of rx requests while grant was inactive that timed out.
+          uint32_t mNumRxGrantDeactivatedDuringRequest; // Number of rx that were in progress when grant was deactivated.
+          uint32_t mNumRxDelayedGrant;                  // Number of rx requests that were not granted within 50us.
+          uint32_t mAvgRxRequestToGrantTime;            // Average time in usec from rx request to grant.
+          uint32_t mNumRxGrantNone;                     // Number of rx requests that completed without receiving grant.
+          bool     mStopped;                            // Stats collection stopped due to saturation.
+        }
+      </literallayout>
+    -->
+    <property name="RadioCoexMetrics" type="(uuuuuuuuuuuuuuuuuub)" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
   </interface>
 
   <interface name="org.freedesktop.DBus.Properties">

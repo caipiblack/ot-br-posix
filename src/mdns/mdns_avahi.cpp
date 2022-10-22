@@ -122,6 +122,42 @@ namespace otbr {
 
 namespace Mdns {
 
+static otbrError DnsErrorToOtbrError(int aAvahiError)
+{
+    otbrError error;
+
+    switch (aAvahiError)
+    {
+    case AVAHI_OK:
+    case AVAHI_ERR_INVALID_ADDRESS:
+        error = OTBR_ERROR_NONE;
+        break;
+
+    case AVAHI_ERR_NOT_FOUND:
+        error = OTBR_ERROR_NOT_FOUND;
+        break;
+
+    case AVAHI_ERR_INVALID_ARGUMENT:
+        error = OTBR_ERROR_INVALID_ARGS;
+        break;
+
+    case AVAHI_ERR_COLLISION:
+        error = OTBR_ERROR_DUPLICATED;
+        break;
+
+    case AVAHI_ERR_DNS_NOTIMP:
+    case AVAHI_ERR_NOT_SUPPORTED:
+        error = OTBR_ERROR_NOT_IMPLEMENTED;
+        break;
+
+    default:
+        error = OTBR_ERROR_MDNS;
+        break;
+    }
+
+    return error;
+}
+
 class AvahiPoller : public MainloopProcessor
 {
 public:
@@ -598,13 +634,13 @@ void PublisherAvahi::HandleClientState(AvahiClient *aClient, AvahiClientState aS
     }
 }
 
-void PublisherAvahi::PublishService(const std::string &aHostName,
-                                    const std::string &aName,
-                                    const std::string &aType,
-                                    const SubTypeList &aSubTypeList,
-                                    uint16_t           aPort,
-                                    const TxtList &    aTxtList,
-                                    ResultCallback &&  aCallback)
+void PublisherAvahi::PublishServiceImpl(const std::string &aHostName,
+                                        const std::string &aName,
+                                        const std::string &aType,
+                                        const SubTypeList &aSubTypeList,
+                                        uint16_t           aPort,
+                                        const TxtList &    aTxtList,
+                                        ResultCallback &&  aCallback)
 {
     otbrError         error             = OTBR_ERROR_NONE;
     int               avahiError        = AVAHI_OK;
@@ -652,7 +688,7 @@ void PublisherAvahi::PublishService(const std::string &aHostName,
     VerifyOrExit(avahiError == AVAHI_OK);
 
     AddServiceRegistration(std::unique_ptr<AvahiServiceRegistration>(new AvahiServiceRegistration(
-        aHostName, aName, aType, sortedSubTypeList, aPort, sortedTxtList, std::move(aCallback), group)));
+        aHostName, aName, aType, sortedSubTypeList, aPort, sortedTxtList, std::move(aCallback), group, this)));
 
 exit:
     if (avahiError != AVAHI_OK || error != OTBR_ERROR_NONE)
@@ -682,38 +718,42 @@ exit:
     std::move(aCallback)(error);
 }
 
-void PublisherAvahi::PublishHost(const std::string &         aName,
-                                 const std::vector<uint8_t> &aAddress,
-                                 ResultCallback &&           aCallback)
+void PublisherAvahi::PublishHostImpl(const std::string &            aName,
+                                     const std::vector<Ip6Address> &aAddresses,
+                                     ResultCallback &&              aCallback)
 {
     otbrError        error      = OTBR_ERROR_NONE;
     int              avahiError = AVAHI_OK;
     std::string      fullHostName;
-    AvahiAddress     address;
     AvahiEntryGroup *group = nullptr;
 
     VerifyOrExit(mState == State::kReady, error = OTBR_ERROR_INVALID_STATE);
     VerifyOrExit(mClient != nullptr, error = OTBR_ERROR_INVALID_STATE);
-    VerifyOrExit(aAddress.size() == sizeof(address.data.ipv6.address), error = OTBR_ERROR_INVALID_ARGS);
 
-    aCallback = HandleDuplicateHostRegistration(aName, aAddress, std::move(aCallback));
+    aCallback = HandleDuplicateHostRegistration(aName, aAddresses, std::move(aCallback));
     VerifyOrExit(!aCallback.IsNull());
-
-    address.proto = AVAHI_PROTO_INET6;
-    memcpy(address.data.ipv6.address, aAddress.data(), aAddress.size());
-    fullHostName = MakeFullHostName(aName);
+    VerifyOrExit(!aAddresses.empty(), std::move(aCallback)(OTBR_ERROR_NONE));
 
     VerifyOrExit((group = CreateGroup(mClient)) != nullptr, error = OTBR_ERROR_MDNS);
-    avahiError = avahi_entry_group_add_address(group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, AVAHI_PUBLISH_NO_REVERSE,
-                                               fullHostName.c_str(), &address);
-    VerifyOrExit(avahiError == AVAHI_OK);
+
+    fullHostName = MakeFullHostName(aName);
+    for (const auto &address : aAddresses)
+    {
+        AvahiAddress avahiAddress;
+
+        avahiAddress.proto = AVAHI_PROTO_INET6;
+        memcpy(avahiAddress.data.ipv6.address, address.m8, sizeof(address.m8));
+        avahiError = avahi_entry_group_add_address(group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, AVAHI_PUBLISH_NO_REVERSE,
+                                                   fullHostName.c_str(), &avahiAddress);
+        VerifyOrExit(avahiError == AVAHI_OK);
+    }
 
     otbrLogInfo("Commit avahi host %s", aName.c_str());
     avahiError = avahi_entry_group_commit(group);
     VerifyOrExit(avahiError == AVAHI_OK);
 
     AddHostRegistration(std::unique_ptr<AvahiHostRegistration>(
-        new AvahiHostRegistration(aName, aAddress, std::move(aCallback), group)));
+        new AvahiHostRegistration(aName, aAddresses, std::move(aCallback), group, this)));
 
 exit:
     if (avahiError != AVAHI_OK || error != OTBR_ERROR_NONE)
@@ -865,14 +905,22 @@ exit:
     return;
 }
 
-void PublisherAvahi::OnServiceResolveFailed(const ServiceSubscription &aService, int aErrorCode)
+void PublisherAvahi::OnServiceResolveFailedImpl(const std::string &aType,
+                                                const std::string &aInstanceName,
+                                                int32_t            aErrorCode)
 {
-    otbrLogWarning("Resolve service %s failed: %s", aService.mType.c_str(), avahi_strerror(aErrorCode));
+    otbrLogWarning("Resolve service %s.%s failed: %s", aInstanceName.c_str(), aType.c_str(),
+                   avahi_strerror(aErrorCode));
 }
 
-void PublisherAvahi::OnHostResolveFailed(const HostSubscription &aHost, int aErrorCode)
+void PublisherAvahi::OnHostResolveFailedImpl(const std::string &aHostName, int32_t aErrorCode)
 {
-    otbrLogWarning("Resolve host %s failed: %s", aHost.mHostName.c_str(), avahi_strerror(aErrorCode));
+    otbrLogWarning("Resolve host %s failed: %s", aHostName.c_str(), avahi_strerror(aErrorCode));
+}
+
+otbrError PublisherAvahi::DnsErrorToOtbrError(int32_t aErrorCode)
+{
+    return otbr::Mdns::DnsErrorToOtbrError(aErrorCode);
 }
 
 void PublisherAvahi::SubscribeHost(const std::string &aHostName)
@@ -1001,7 +1049,7 @@ void PublisherAvahi::ServiceSubscription::HandleBrowseResult(AvahiServiceBrowser
         // do nothing
         break;
     case AVAHI_BROWSER_FAILURE:
-        mPublisherAvahi->OnServiceResolveFailed(*this, avahi_client_errno(mPublisherAvahi->mClient));
+        mPublisherAvahi->OnServiceResolveFailed(aType, aName, avahi_client_errno(mPublisherAvahi->mClient));
         break;
     }
 }
@@ -1012,6 +1060,8 @@ void PublisherAvahi::ServiceSubscription::Resolve(uint32_t           aInterfaceI
                                                   const std::string &aType)
 {
     AvahiServiceResolver *resolver;
+
+    mPublisherAvahi->mServiceInstanceResolutionBeginTime[std::make_pair(aInstanceName, aType)] = Clock::now();
 
     otbrLogInfo("Resolve service %s.%s inf %" PRIu32, aInstanceName.c_str(), aType.c_str(), aInterfaceIndex);
 
@@ -1123,7 +1173,7 @@ exit:
     }
     else if (avahiError != AVAHI_OK)
     {
-        mPublisherAvahi->OnServiceResolveFailed(*this, avahi_client_errno(mPublisherAvahi->mClient));
+        mPublisherAvahi->OnServiceResolveFailed(aType, aName, avahiError);
     }
 }
 
@@ -1154,6 +1204,8 @@ void PublisherAvahi::HostSubscription::Release(void)
 void PublisherAvahi::HostSubscription::Resolve(void)
 {
     std::string fullHostName = MakeFullHostName(mHostName);
+
+    mPublisherAvahi->mHostResolutionBeginTime[mHostName] = Clock::now();
 
     otbrLogInfo("Resolve host %s inf %d", fullHostName.c_str(), static_cast<int>(AVAHI_IF_UNSPEC));
     mRecordBrowser = avahi_record_browser_new(mPublisherAvahi->mClient, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC,
@@ -1235,7 +1287,7 @@ exit:
     }
     else if (avahiError != AVAHI_OK)
     {
-        mPublisherAvahi->OnHostResolveFailed(*this, avahiError);
+        mPublisherAvahi->OnHostResolveFailed(mHostName, avahiError);
     }
 }
 

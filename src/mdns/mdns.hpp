@@ -44,6 +44,7 @@
 
 #include "common/callback.hpp"
 #include "common/code_utils.hpp"
+#include "common/time.hpp"
 #include "common/types.hpp"
 
 namespace otbr {
@@ -96,6 +97,7 @@ public:
 
     typedef std::vector<TxtEntry>    TxtList;
     typedef std::vector<std::string> SubTypeList;
+    typedef std::vector<Ip6Address>  AddressList;
 
     /**
      * This structure represents information of a discovered service instance.
@@ -199,13 +201,13 @@ public:
      *                          alternative name is available/acceptable.
      *
      */
-    virtual void PublishService(const std::string &aHostName,
-                                const std::string &aName,
-                                const std::string &aType,
-                                const SubTypeList &aSubTypeList,
-                                uint16_t           aPort,
-                                const TxtList &    aTxtList,
-                                ResultCallback &&  aCallback) = 0;
+    void PublishService(const std::string &aHostName,
+                        const std::string &aName,
+                        const std::string &aType,
+                        const SubTypeList &aSubTypeList,
+                        uint16_t           aPort,
+                        const TxtList &    aTxtList,
+                        ResultCallback &&  aCallback);
 
     /**
      * This method un-publishes a service.
@@ -223,18 +225,16 @@ public:
      * Publishing a host is advertising an AAAA RR for the host name. This method should be called
      * before a service with non-empty host name is published.
      *
-     * @param[in] aName      The name of the host.
-     * @param[in] aAddress   The address of the host.
-     * @param[in] aCallback  The callback for receiving the publishing result.`OTBR_ERROR_NONE` will be
-     *                       returned if the operation is successful and all other values indicate a
-     *                       failure. Specifically, `OTBR_ERROR_DUPLICATED` indicates that the name has
-     *                       already been published and the caller can re-publish with a new name if an
-     *                       alternative name is available/acceptable.
+     * @param[in] aName       The name of the host.
+     * @param[in] aAddresses  The addresses of the host.
+     * @param[in] aCallback   The callback for receiving the publishing result.`OTBR_ERROR_NONE` will be
+     *                        returned if the operation is successful and all other values indicate a
+     *                        failure. Specifically, `OTBR_ERROR_DUPLICATED` indicates that the name has
+     *                        already been published and the caller can re-publish with a new name if an
+     *                        alternative name is available/acceptable.
      *
      */
-    virtual void PublishHost(const std::string &         aName,
-                             const std::vector<uint8_t> &aAddress,
-                             ResultCallback &&           aCallback) = 0;
+    void PublishHost(const std::string &aName, const std::vector<Ip6Address> &aAddresses, ResultCallback &&aCallback);
 
     /**
      * This method un-publishes a host.
@@ -317,6 +317,14 @@ public:
      */
     void RemoveSubscriptionCallbacks(uint64_t aSubscriberId);
 
+    /**
+     * This method returns the mDNS statistics information of the publisher.
+     *
+     * @returns  The MdnsTelemetryInfo of the publisher.
+     *
+     */
+    const MdnsTelemetryInfo &GetMdnsTelemetryInfo() const { return mTelemetryInfo; }
+
     virtual ~Publisher(void) = default;
 
     /**
@@ -380,25 +388,28 @@ protected:
     {
     public:
         ResultCallback mCallback;
+        Publisher *    mPublisher;
 
-        Registration(ResultCallback &&aCallback)
+        Registration(ResultCallback &&aCallback, Publisher *aPublisher)
             : mCallback(std::move(aCallback))
+            , mPublisher(aPublisher)
         {
         }
         virtual ~Registration(void);
 
+        // Tells whether the service registration has been completed (typically by calling
+        // `ServiceRegistration::Complete`).
+        bool IsCompleted() const { return mCallback.IsNull(); }
+
+    protected:
         // Completes the service registration with given result/error.
-        void Complete(otbrError aError)
+        void TriggerCompleteCallback(otbrError aError)
         {
             if (!IsCompleted())
             {
                 std::move(mCallback)(aError);
             }
         }
-
-        // Tells whether the service registration has been completed (typically by calling
-        // `ServiceRegistration::Complete`).
-        bool IsCompleted() const { return mCallback.IsNull(); }
     };
 
     class ServiceRegistration : public Registration
@@ -417,8 +428,9 @@ protected:
                             SubTypeList      aSubTypeList,
                             uint16_t         aPort,
                             TxtList          aTxtList,
-                            ResultCallback &&aCallback)
-            : Registration(std::move(aCallback))
+                            ResultCallback &&aCallback,
+                            Publisher *      aPublisher)
+            : Registration(std::move(aCallback), aPublisher)
             , mHostName(std::move(aHostName))
             , mName(std::move(aName))
             , mType(std::move(aType))
@@ -427,7 +439,11 @@ protected:
             , mTxtList(SortTxtList(std::move(aTxtList)))
         {
         }
-        ~ServiceRegistration(void) override = default;
+        ~ServiceRegistration(void) override { OnComplete(OTBR_ERROR_ABORTED); }
+
+        void Complete(otbrError aError);
+
+        void OnComplete(otbrError aError);
 
         // Tells whether this `ServiceRegistration` object is outdated comparing to the given parameters.
         bool IsOutdated(const std::string &aHostName,
@@ -441,20 +457,24 @@ protected:
     class HostRegistration : public Registration
     {
     public:
-        std::string          mName;
-        std::vector<uint8_t> mAddress;
+        std::string             mName;
+        std::vector<Ip6Address> mAddresses;
 
-        HostRegistration(std::string aName, std::vector<uint8_t> aAddress, ResultCallback &&aCallback)
-            : Registration(std::move(aCallback))
+        HostRegistration(std::string aName, AddressList aAddresses, ResultCallback &&aCallback, Publisher *aPublisher)
+            : Registration(std::move(aCallback), aPublisher)
             , mName(std::move(aName))
-            , mAddress(std::move(aAddress))
+            , mAddresses(SortAddressList(std::move(aAddresses)))
         {
         }
 
-        ~HostRegistration(void) override = default;
+        ~HostRegistration(void) { OnComplete(OTBR_ERROR_ABORTED); }
+
+        void Complete(otbrError aError);
+
+        void OnComplete(otbrError);
 
         // Tells whether this `HostRegistration` object is outdated comparing to the given parameters.
-        bool IsOutdated(const std::string &aName, const std::vector<uint8_t> &aAddress) const;
+        bool IsOutdated(const std::string &aName, const std::vector<Ip6Address> &aAddresses) const;
     };
 
     using ServiceRegistrationPtr = std::unique_ptr<ServiceRegistration>;
@@ -464,15 +484,35 @@ protected:
 
     static SubTypeList SortSubTypeList(SubTypeList aSubTypeList);
     static TxtList     SortTxtList(TxtList aTxtList);
+    static AddressList SortAddressList(AddressList aAddressList);
     static std::string MakeFullServiceName(const std::string &aName, const std::string &aType);
     static std::string MakeFullHostName(const std::string &aName);
+
+    virtual void PublishServiceImpl(const std::string &aHostName,
+                                    const std::string &aName,
+                                    const std::string &aType,
+                                    const SubTypeList &aSubTypeList,
+                                    uint16_t           aPort,
+                                    const TxtList &    aTxtList,
+                                    ResultCallback &&  aCallback)                            = 0;
+    virtual void PublishHostImpl(const std::string &            aName,
+                                 const std::vector<Ip6Address> &aAddresses,
+                                 ResultCallback &&              aCallback)                               = 0;
+    virtual void OnServiceResolveFailedImpl(const std::string &aType,
+                                            const std::string &aInstanceName,
+                                            int32_t            aErrorCode)                            = 0;
+    virtual void OnHostResolveFailedImpl(const std::string &aHostName, int32_t aErrorCode) = 0;
+
+    virtual otbrError DnsErrorToOtbrError(int32_t aError) = 0;
 
     void AddServiceRegistration(ServiceRegistrationPtr &&aServiceReg);
     void RemoveServiceRegistration(const std::string &aName, const std::string &aType, otbrError aError);
     ServiceRegistration *FindServiceRegistration(const std::string &aName, const std::string &aType);
     void                 OnServiceResolved(const std::string &aType, const DiscoveredInstanceInfo &aInstanceInfo);
+    void OnServiceResolveFailed(const std::string &aType, const std::string &aInstanceName, int32_t aErrorCode);
     void OnServiceRemoved(uint32_t aNetifIndex, const std::string &aType, const std::string &aInstanceName);
     void OnHostResolved(const std::string &aHostName, const DiscoveredHostInfo &aHostInfo);
+    void OnHostResolveFailed(const std::string &aHostName, int32_t aErrorCode);
 
     // Handles the cases that there is already a registration for the same service.
     // If the returned callback is completed, current registration should be considered
@@ -485,13 +525,25 @@ protected:
                                                       const TxtList &    aTxtList,
                                                       ResultCallback &&  aCallback);
 
-    ResultCallback HandleDuplicateHostRegistration(const std::string &         aName,
-                                                   const std::vector<uint8_t> &aAddress,
-                                                   ResultCallback &&           aCallback);
+    ResultCallback HandleDuplicateHostRegistration(const std::string &            aName,
+                                                   const std::vector<Ip6Address> &aAddresses,
+                                                   ResultCallback &&              aCallback);
 
     void              AddHostRegistration(HostRegistrationPtr &&aHostReg);
     void              RemoveHostRegistration(const std::string &aName, otbrError aError);
     HostRegistration *FindHostRegistration(const std::string &aName);
+
+    static void UpdateMdnsResponseCounters(otbr::MdnsResponseCounters &aCounters, otbrError aError);
+    static void UpdateEmaLatency(uint32_t &aEmaLatency, uint32_t aLatency, otbrError aError);
+
+    void UpdateServiceRegistrationEmaLatency(const std::string &aInstanceName,
+                                             const std::string &aType,
+                                             otbrError          aError);
+    void UpdateHostRegistrationEmaLatency(const std::string &aHostName, otbrError aError);
+    void UpdateServiceInstanceResolutionEmaLatency(const std::string &aInstanceName,
+                                                   const std::string &aType,
+                                                   otbrError          aError);
+    void UpdateHostResolutionEmaLatency(const std::string &aHostName, otbrError aError);
 
     ServiceRegistrationMap mServiceRegistrations;
     HostRegistrationMap    mHostRegistrations;
@@ -499,6 +551,16 @@ protected:
     uint64_t mNextSubscriberId = 1;
 
     std::map<uint64_t, std::pair<DiscoveredServiceInstanceCallback, DiscoveredHostCallback>> mDiscoveredCallbacks;
+    // {instance name, service type} -> the timepoint to begin service registration
+    std::map<std::pair<std::string, std::string>, Timepoint> mServiceRegistrationBeginTime;
+    // host name -> the timepoint to begin host registration
+    std::map<std::string, Timepoint> mHostRegistrationBeginTime;
+    // {instance name, service type} -> the timepoint to begin service resolution
+    std::map<std::pair<std::string, std::string>, Timepoint> mServiceInstanceResolutionBeginTime;
+    // host name -> the timepoint to begin host resolution
+    std::map<std::string, Timepoint> mHostResolutionBeginTime;
+
+    otbr::MdnsTelemetryInfo mTelemetryInfo{};
 };
 
 /**

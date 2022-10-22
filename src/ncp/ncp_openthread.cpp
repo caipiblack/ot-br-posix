@@ -37,6 +37,7 @@
 #include <openthread/backbone_router_ftd.h>
 #include <openthread/dataset.h>
 #include <openthread/logging.h>
+#include <openthread/nat64.h>
 #include <openthread/srp_server.h>
 #include <openthread/tasklet.h>
 #include <openthread/thread.h>
@@ -64,8 +65,10 @@ static const uint16_t kThreadVersion13 = 4; ///< Thread Version 1.3
 ControllerOpenThread::ControllerOpenThread(const char *                     aInterfaceName,
                                            const std::vector<const char *> &aRadioUrls,
                                            const char *                     aBackboneInterfaceName,
-                                           bool                             aDryRun)
+                                           bool                             aDryRun,
+                                           bool                             aEnableAutoAttach)
     : mInstance(nullptr)
+    , mEnableAutoAttach(aEnableAutoAttach)
 {
     VerifyOrDie(aRadioUrls.size() <= OT_PLATFORM_CONFIG_MAX_RADIO_URLS, "Too many Radio URLs!");
 
@@ -172,6 +175,9 @@ void ControllerOpenThread::Init(void)
 #if OTBR_ENABLE_SRP_ADVERTISING_PROXY
     otSrpServerSetEnabled(mInstance, /* aEnabled */ true);
 #endif
+#if OTBR_ENABLE_NAT64
+    otNat64SetEnabled(mInstance, /* aEnabled */ true);
+#endif
 
     mThreadHelper = std::unique_ptr<otbr::agent::ThreadHelper>(new otbr::agent::ThreadHelper(mInstance, this));
 
@@ -242,15 +248,12 @@ void ControllerOpenThread::Process(const MainloopContext &aMainloop)
 
 bool ControllerOpenThread::IsAutoAttachEnabled(void)
 {
-    const char *val = getenv("OTBR_NO_AUTO_ATTACH");
-
-    // Auto Thread attaching is enabled if OTBR_NO_AUTO_ATTACH is unset, empty or "0"
-    return (val == nullptr || !strcmp(val, "") || !strcmp(val, "0"));
+    return mEnableAutoAttach;
 }
 
 void ControllerOpenThread::DisableAutoAttach(void)
 {
-    setenv("OTBR_NO_AUTO_ATTACH", "1", 1);
+    mEnableAutoAttach = false;
 }
 
 void ControllerOpenThread::PostTimerTask(Milliseconds aDelay, TaskRunner::Task<void> aTask)
@@ -280,7 +283,7 @@ void ControllerOpenThread::Reset(void)
     {
         handler();
     }
-    unsetenv("OTBR_NO_AUTO_ATTACH");
+    mEnableAutoAttach = true;
 }
 
 const char *ControllerOpenThread::GetThreadVersion(void)

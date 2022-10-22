@@ -36,15 +36,11 @@ on:
     branches:
       - 'main'
 
-jobs:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.repository == 'openthread/ot-br-posix' && github.run_id) || github.ref }}
+  cancel-in-progress: true
 
-  cancel-previous-runs:
-    runs-on: ubuntu-20.04
-    steps:
-    - uses: rokroskar/workflow-run-cleanup-action@master
-      env:
-        GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-      if: "github.ref != 'refs/heads/main'"
+jobs:
 
   docker-check:
     runs-on: ubuntu-latest
@@ -57,7 +53,7 @@ jobs:
       OTBR_COVERAGE: 1
       VERBOSE: 1
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         submodules: true
     - name: Bootstrap
@@ -83,8 +79,8 @@ jobs:
             build_args: ""
             platforms: "linux/amd64,linux/arm64"
             push: yes
-          - image_tag: "hirsute"
-            base_image: "ubuntu:hirsute"
+          - image_tag: "jammy"
+            base_image: "ubuntu:jammy"
             build_args: ""
             platforms: "linux/amd64,linux/arm64"
             push: yes
@@ -110,7 +106,7 @@ jobs:
             platforms: "linux/amd64,linux/arm/v7,linux/arm64"
             push: no
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         submodules: true
 

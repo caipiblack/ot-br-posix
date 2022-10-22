@@ -58,6 +58,7 @@
 #if OTBR_ENABLE_VENDOR_SERVER
 #include "agent/vendor.hpp"
 #endif
+#include "utils/infra_link_selector.hpp"
 
 namespace otbr {
 
@@ -80,12 +81,16 @@ public:
     /**
      * This constructor initializes the Application instance.
      *
-     * @param[in] aOpenThread  A reference to the OpenThread instance.
+     * @param[in] aInterfaceName         Name of the Thread network interface.
+     * @param[in] aBackboneInterfaceName Name of the backbone network interface.
+     * @param[in] aRadioUrls             The radio URLs (can be IEEE802.15.4 or TREL radio).
+     * @param[in] aEnableAutoAttach      Whether or not to automatically attach to the saved network.
      *
      */
     explicit Application(const std::string &              aInterfaceName,
-                         const std::string &              aBackboneInterfaceName,
-                         const std::vector<const char *> &aRadioUrls);
+                         const std::vector<const char *> &aBackboneInterfaceNames,
+                         const std::vector<const char *> &aRadioUrls,
+                         bool                             aEnableAutoAttach);
 
     /**
      * This method initializes the Application instance.
@@ -114,8 +119,11 @@ private:
 
     static void HandleSignal(int aSignal);
 
-    std::string               mInterfaceName;
-    std::string               mBackboneInterfaceName;
+    std::string mInterfaceName;
+#if __linux__
+    otbr::Utils::InfraLinkSelector mInfraLinkSelector;
+#endif
+    const char *              mBackboneInterfaceName;
     Ncp::ControllerOpenThread mNcp;
 #if OTBR_ENABLE_BORDER_AGENT
     BorderAgent mBorderAgent;

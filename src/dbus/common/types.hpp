@@ -41,9 +41,6 @@
 #include <string>
 #include <vector>
 
-#include <openthread/dnssd_server.h>
-#include <openthread/srp_server.h>
-
 namespace otbr {
 namespace DBus {
 
@@ -527,57 +524,100 @@ enum SrpServerState : uint8_t
     OTBR_SRP_SERVER_STATE_STOPPED  = 2, ///< The SRP server is stopped.
 };
 
-static_assert(OTBR_SRP_SERVER_STATE_DISABLED == static_cast<uint8_t>(OT_SRP_SERVER_STATE_DISABLED),
-              "OTBR_SRP_SERVER_STATE_DISABLED value is incorrect");
-static_assert(OTBR_SRP_SERVER_STATE_RUNNING == static_cast<uint8_t>(OT_SRP_SERVER_STATE_RUNNING),
-              "OTBR_SRP_SERVER_STATE_RUNNING value is incorrect");
-static_assert(OTBR_SRP_SERVER_STATE_STOPPED == static_cast<uint8_t>(OT_SRP_SERVER_STATE_STOPPED),
-              "OTBR_SRP_SERVER_STATE_STOPPED value is incorrect");
-
 enum SrpServerAddressMode : uint8_t
 {
     OTBR_SRP_SERVER_ADDRESS_MODE_UNICAST = 0, ///< Unicast address mode.
     OTBR_SRP_SERVER_ADDRESS_MODE_ANYCAST = 1, ///< Anycast address mode.
 };
 
-static_assert(OTBR_SRP_SERVER_ADDRESS_MODE_UNICAST == static_cast<uint8_t>(OT_SRP_SERVER_ADDRESS_MODE_UNICAST),
-              "OTBR_SRP_SERVER_ADDRESS_MODE_UNICAST value is incorrect");
-static_assert(OTBR_SRP_SERVER_ADDRESS_MODE_ANYCAST == static_cast<uint8_t>(OT_SRP_SERVER_ADDRESS_MODE_ANYCAST),
-              "OTBR_SRP_SERVER_ADDRESS_MODE_ANYCAST value is incorrect");
-
 struct SrpServerInfo
 {
     struct Registration
     {
-        uint32_t mFreshCount;
-        uint32_t mDeletedCount;
-        uint64_t mLeaseTimeTotal;
-        uint64_t mKeyLeaseTimeTotal;
-        uint64_t mRemainingLeaseTimeTotal;
-        uint64_t mRemainingKeyLeaseTimeTotal;
+        uint32_t mFreshCount;        ///< The number of active hosts/services registered on the SRP server
+        uint32_t mDeletedCount;      ///< The number of hosts/services in 'Deleted' state on the SRP server
+        uint64_t mLeaseTimeTotal;    ///< The sum of lease time in milliseconds of all active hosts/services
+                                     ///< on the SRP server
+        uint64_t mKeyLeaseTimeTotal; ///< The sum of key lease time in milliseconds of all active hosts/services on the
+                                     ///< SRP server
+        uint64_t mRemainingLeaseTimeTotal;    ///< The sum of remaining lease time in milliseconds of all active
+                                              ///< hosts/services on the SRP server
+        uint64_t mRemainingKeyLeaseTimeTotal; ///< The sum of remaining key lease time in milliseconds of all active
+                                              ///< hosts/services on the SRP server
     };
 
     struct ResponseCounters
     {
-        uint32_t mSuccess;
-        uint32_t mServerFailure;
-        uint32_t mFormatError;
-        uint32_t mNameExists;
-        uint32_t mRefused;
-        uint32_t mOther;
+        uint32_t mSuccess;       ///< The number of successful responses
+        uint32_t mServerFailure; ///< The number of server failure responses
+        uint32_t mFormatError;   ///< The number of format error responses
+        uint32_t mNameExists;    ///< The number of 'name exists' responses
+        uint32_t mRefused;       ///< The number of refused responses
+        uint32_t mOther;         ///< The number of other responses
     };
 
-    SrpServerState       mState;
-    uint16_t             mPort;
-    SrpServerAddressMode mAddressMode;
-    Registration         mHosts;
-    Registration         mServices;
-    ResponseCounters     mResponseCounters;
+    SrpServerState       mState;            ///< The state of the SRP server
+    uint16_t             mPort;             ///< The listening port number
+    SrpServerAddressMode mAddressMode;      ///< The address mode {unicast, anycast} of the SRP server
+    Registration         mHosts;            ///< The registration information of hosts on the SRP server
+    Registration         mServices;         ///< The registration information of services on the SRP server
+    ResponseCounters     mResponseCounters; ///< The counters of response codes sent by the SRP server
 };
 
-#if OTBR_ENABLE_DNSSD_DISCOVERY_PROXY
-typedef otDnssdCounters DnssdCounters;
-#endif
+struct DnssdCounters
+{
+    uint32_t mSuccessResponse;        ///< The number of successful responses
+    uint32_t mServerFailureResponse;  ///< The number of server failure responses
+    uint32_t mFormatErrorResponse;    ///< The number of format error responses
+    uint32_t mNameErrorResponse;      ///< The number of name error responses
+    uint32_t mNotImplementedResponse; ///< The number of 'not implemented' responses
+    uint32_t mOtherResponse;          ///< The number of other responses
+
+    uint32_t mResolvedBySrp; ///< The number of queries completely resolved by the local SRP server
+};
+
+struct RadioSpinelMetrics
+{
+    uint32_t mRcpTimeoutCount;         ///< The number of RCP timeouts.
+    uint32_t mRcpUnexpectedResetCount; ///< The number of RCP unexcepted resets.
+    uint32_t mRcpRestorationCount;     ///< The number of RCP restorations.
+    uint32_t mSpinelParseErrorCount;   ///< The number of spinel frame parse errors.
+};
+
+struct RcpInterfaceMetrics
+{
+    uint8_t  mRcpInterfaceType;             ///< The RCP interface type.
+    uint64_t mTransferredFrameCount;        ///< The number of transferred frames.
+    uint64_t mTransferredValidFrameCount;   ///< The number of transferred valid frames.
+    uint64_t mTransferredGarbageFrameCount; ///< The number of transferred garbage frames.
+    uint64_t mRxFrameCount;                 ///< The number of received frames.
+    uint64_t mRxFrameByteCount;             ///< The number of received bytes.
+    uint64_t mTxFrameCount;                 ///< The number of transmitted frames.
+    uint64_t mTxFrameByteCount;             ///< The number of transmitted bytes.
+};
+
+struct RadioCoexMetrics
+{
+    uint32_t mNumGrantGlitch;          ///< Number of grant glitches.
+    uint32_t mNumTxRequest;            ///< Number of tx requests.
+    uint32_t mNumTxGrantImmediate;     ///< Number of tx requests while grant was active.
+    uint32_t mNumTxGrantWait;          ///< Number of tx requests while grant was inactive.
+    uint32_t mNumTxGrantWaitActivated; ///< Number of tx requests while grant was inactive that were ultimately granted.
+    uint32_t mNumTxGrantWaitTimeout;   ///< Number of tx requests while grant was inactive that timed out.
+    uint32_t mNumTxGrantDeactivatedDuringRequest; ///< Number of tx that were in progress when grant was deactivated.
+    uint32_t mNumTxDelayedGrant;                  ///< Number of tx requests that were not granted within 50us.
+    uint32_t mAvgTxRequestToGrantTime;            ///< Average time in usec from tx request to grant.
+    uint32_t mNumRxRequest;                       ///< Number of rx requests.
+    uint32_t mNumRxGrantImmediate;                ///< Number of rx requests while grant was active.
+    uint32_t mNumRxGrantWait;                     ///< Number of rx requests while grant was inactive.
+    uint32_t mNumRxGrantWaitActivated; ///< Number of rx requests while grant was inactive that were ultimately granted.
+    uint32_t mNumRxGrantWaitTimeout;   ///< Number of rx requests while grant was inactive that timed out.
+    uint32_t mNumRxGrantDeactivatedDuringRequest; ///< Number of rx that were in progress when grant was deactivated.
+    uint32_t mNumRxDelayedGrant;                  ///< Number of rx requests that were not granted within 50us.
+    uint32_t mAvgRxRequestToGrantTime;            ///< Average time in usec from rx request to grant.
+    uint32_t mNumRxGrantNone;                     ///< Number of rx requests that completed without receiving grant.
+    bool     mStopped;                            ///< Stats collection stopped due to saturation.
+};
 
 } // namespace DBus
 } // namespace otbr
