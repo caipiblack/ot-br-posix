@@ -31,21 +31,22 @@ START=89
 
 USE_PROCD=1
 
-THREAD_IF="wpan0"
 OTBR_FORWARD_INGRESS_CHAIN="OTBR_FORWARD_INGRESS"
 
 start_service() {
-  ipset create -exist otbr-ingress-deny-src hash:net family inet6
-  ipset create -exist otbr-ingress-deny-src-swap hash:net family inet6
-  ipset create -exist otbr-ingress-allow-dst hash:net family inet6
-  ipset create -exist otbr-ingress-allow-dst-swap hash:net family inet6
+	local uci_thread_if_name=$(uci -q get otbr-agent.service.thread_if_name)
 
-  ip6tables -N $OTBR_FORWARD_INGRESS_CHAIN
-  ip6tables -I FORWARD 1 -o $THREAD_IF -j $OTBR_FORWARD_INGRESS_CHAIN
+	ipset create -exist otbr-ingress-deny-src hash:net family inet6
+	ipset create -exist otbr-ingress-deny-src-swap hash:net family inet6
+	ipset create -exist otbr-ingress-allow-dst hash:net family inet6
+	ipset create -exist otbr-ingress-allow-dst-swap hash:net family inet6
 
-  ip6tables -A $OTBR_FORWARD_INGRESS_CHAIN -m pkttype --pkt-type unicast -i $THREAD_IF -p ip -j DROP
-  ip6tables -A $OTBR_FORWARD_INGRESS_CHAIN -m set --match-set otbr-ingress-deny-src src -p ip -j DROP
-  ip6tables -A $OTBR_FORWARD_INGRESS_CHAIN -m set --match-set otbr-ingress-allow-dst dst -p ip -j ACCEPT
-  ip6tables -A $OTBR_FORWARD_INGRESS_CHAIN -m pkttype --pkt-type unicast -p ip -j DROP
-  ip6tables -A $OTBR_FORWARD_INGRESS_CHAIN -p ip -j ACCEPT
+	ip6tables -N $OTBR_FORWARD_INGRESS_CHAIN
+	ip6tables -I FORWARD 1 -o $uci_thread_if_name -j $OTBR_FORWARD_INGRESS_CHAIN
+
+	ip6tables -A $OTBR_FORWARD_INGRESS_CHAIN -m pkttype --pkt-type unicast -i $uci_thread_if_name -p ip -j DROP
+	ip6tables -A $OTBR_FORWARD_INGRESS_CHAIN -m set --match-set otbr-ingress-deny-src src -p ip -j DROP
+	ip6tables -A $OTBR_FORWARD_INGRESS_CHAIN -m set --match-set otbr-ingress-allow-dst dst -p ip -j ACCEPT
+	ip6tables -A $OTBR_FORWARD_INGRESS_CHAIN -m pkttype --pkt-type unicast -p ip -j DROP
+	ip6tables -A $OTBR_FORWARD_INGRESS_CHAIN -p ip -j ACCEPT
 }

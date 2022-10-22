@@ -73,6 +73,9 @@ define Package/openthread-br/install
 
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/etc/init.d/* $(1)/etc/init.d
+	
+	$(INSTALL_DIR) $(1)/etc/config
+	$(INSTALL_CONF) $(PKG_INSTALL_DIR)/etc/config/* $(1)/etc/config
 
 	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/controller/admin
 	$(INSTALL_BIN) $(LOCAL_SOURCE_DIR)/src/openwrt/controller/thread.lua $(1)/usr/lib/lua/luci/controller/admin
